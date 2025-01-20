@@ -1,4 +1,8 @@
 $downloadUrl = 'https://raw.githubusercontent.com/zamkara/specitify/refs/heads/main/specitify.ps1?token=GHSAT0AAAAAAC5MQM2TOU5C7X2AFYORMSO4Z4OVCKQ'
 $tempFilePath = [System.IO.Path]::Combine($env:TEMP, 'specitify.ps1')
+
+# Mengunduh file .ps1 ke direktori sementara
 Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFilePath
-Start-Process -FilePath $tempFilePath
+
+# Menjalankan file PowerShell yang diunduh
+Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File $tempFilePath" -Wait
