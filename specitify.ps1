@@ -2,11 +2,17 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $spicetifyFolderPath = "$env:LOCALAPPDATA\spicetify"
 $spicetifyOldFolderPath = "$HOME\spicetify-cli"
-$spotifyAppPath = "C:\Users\F15\AppData\Roaming\Spotify"
-$spotifyExePathLocal = "C:\Users\F15\AppData\Local\Spotify\Spotify.exe"
-$spotifyExePathRoaming = "C:\Users\F15\AppData\Roaming\Spotify\Spotify.exe"
-$marketAppPath = "$spotifyAppPath\Spicetify Marketplace"
-$marketThemePath = "$marketAppPath\themes"
+$spotifyAppPath = "C:\Users\zam\AppData\Roaming\Spotify"
+$spotifyExePathLocal = "C:\Users\zam\AppData\Local\Spotify\Spotify.exe"
+$spotifyExePathRoaming = "C:\Users\zam\AppData\Roaming\Spotify\Spotify.exe"
+
+function Write-Success {
+    Write-Host ' > OK' -ForegroundColor Green
+}
+
+function Write-Unsuccess {
+    Write-Host ' > ERROR' -ForegroundColor Red
+}
 
 function Test-SpotifyInstalled {
     if (Test-Path $spotifyAppPath) {
@@ -22,18 +28,14 @@ function Test-SpotifyRunning {
     (Get-Process Spotify -ErrorAction SilentlyContinue) -ne $null
 }
 
-function Write-Success {
-    Write-Host ' > OK' -ForegroundColor Green
-}
-
-function Write-Unsuccess {
-    Write-Host ' > ERROR' -ForegroundColor Red
+function Test-SpotifyStoreBuild {
+    (Get-AppxPackage -Name Spotify.Spotify -ErrorAction SilentlyContinue) -ne $null
 }
 
 function Install-Spotify {
     Write-Host 'Spotify is not installed. Installing Spotify...' -NoNewline
     try {
-        Start-Process winget -ArgumentList 'install -e --id Spotify.Spotify' -Wait
+        Start-Process winget -ArgumentList 'install -e --id Spotify.Spotify --source winget' -Wait
         Write-Success
     } catch {
         Write-Unsuccess
@@ -71,27 +73,15 @@ function Get-Spicetify {
         $architecture = 'x32'
     }
 
-    if ($v) {
-        if ($v -match '^\d+\.\d+\.\d+$') {
-            $targetVersion = $v
-        } else {
-            Write-Warning "You have spicefied an invalid spicetify version: $v `nThe version must be in the following format: 1.2.3"
-            Pause
-        }
-    } else {
-        Write-Host 'Fetching the latest spicetify version...' -NoNewline
-        $latestRelease = Invoke-RestMethod 'https://api.github.com/repos/spicetify/cli/releases/latest'
-        $targetVersion = $latestRelease.tag_name -replace 'v', ''
-        Write-Success
-    }
+    Write-Host 'Fetching the latest spicetify version...' -NoNewline
+    $latestRelease = Invoke-RestMethod 'https://api.github.com/repos/spicetify/cli/releases/latest'
+    $targetVersion = $latestRelease.tag_name -replace 'v', ''
+    Write-Success
 
     $archivePath = [IO.Path]::Combine([IO.Path]::GetTempPath(), 'spicetify.zip')
 
     Write-Host "Downloading spicetify v$targetVersion..." -NoNewline
-    Invoke-WebRequest `
-        -Uri "https://github.com/spicetify/cli/releases/download/v$targetVersion/spicetify-$targetVersion-windows-$architecture.zip" `
-        -OutFile $archivePath `
-        -UseBasicParsing
+    Invoke-WebRequest -Uri "https://github.com/spicetify/cli/releases/download/v$targetVersion/spicetify-$targetVersion-windows-$architecture.zip" -OutFile $archivePath -UseBasicParsing
     Write-Success
 
     $archivePath
@@ -137,46 +127,42 @@ if (-not (Test-SpotifyRunning)) {
 
 if (-not (Test-PowerShellVersion)) {
     Write-Unsuccess
-    Write-Warning 'PowerShell 5.1 or higher is required to run this script'
-    Write-Warning "You are running PowerShell $($PSVersionTable.PSVersion)"
+    Write-Warning 'PowerShell 5.1 or higher is required'
 } else {
     Write-Success
 }
 
 if (-not (Test-Admin)) {
     Write-Unsuccess
-    Write-Warning 'The script was run as administrator. This can result in problems with the installation process or unexpected behavior.'
+    Write-Warning 'The script was run as administrator'
+} else {
+    Write-Success
+}
+
+if (Test-SpotifyStoreBuild) {
+    Write-Warning 'Detected Microsoft Store / Master build of Spotify'
+    Write-Warning 'Spicetify only works with Release build'
+    Write-Warning 'Uninstall Spotify and reinstall from https://www.spotify.com/download/windows/'
+} else {
+    Move-OldSpicetifyFolder
+    Install-Spicetify
+
+    Write-Host "`nRun" -NoNewline
+    Write-Host ' spicetify backup apply ' -NoNewline -ForegroundColor Cyan
+    Write-Host 'then'
+    Write-Host ' spicetify apply ' -ForegroundColor Cyan
+
     $Host.UI.RawUI.FlushInputBuffer()
     $choices = @(
         (New-Object Management.Automation.Host.ChoiceDescription '&Yes'),
         (New-Object Management.Automation.Host.ChoiceDescription '&No')
     )
-    $choice = $Host.UI.PromptForChoice('', 'Do you want to abort the installation process?', $choices, 0)
+    $choice = $Host.UI.PromptForChoice('', 'Do you also want to install Spicetify Marketplace?', $choices, 0)
+
     if ($choice -eq 0) {
-        Write-Host 'spicetify installation aborted' -ForegroundColor Yellow
-        Pause
+        Write-Host 'Starting the spicetify Marketplace installation script..'
+        Invoke-WebRequest 'https://raw.githubusercontent.com/spicetify/spicetify-marketplace/main/resources/install.ps1' -UseBasicParsing | Invoke-Expression
+    } else {
+        Write-Host 'spicetify Marketplace installation aborted' -ForegroundColor Yellow
     }
-} else {
-    Write-Success
-}
-
-Move-OldSpicetifyFolder
-Install-Spicetify
-
-Write-Host "`nRun" -NoNewline
-Write-Host ' spicetify -h ' -NoNewline -ForegroundColor Cyan
-Write-Host 'to get started'
-
-$Host.UI.RawUI.FlushInputBuffer()
-$choices = @(
-    (New-Object Management.Automation.Host.ChoiceDescription '&Yes'),
-    (New-Object Management.Automation.Host.ChoiceDescription '&No')
-)
-$choice = $Host.UI.PromptForChoice('', 'Do you also want to install Spicetify Marketplace? It will become available within the Spotify client, where you can easily install themes and extensions.', $choices, 0)
-
-if ($choice -eq 1) {
-    Write-Host 'spicetify Marketplace installation aborted' -ForegroundColor Yellow
-} else {
-    Write-Host 'Starting the spicetify Marketplace installation script..'
-    Invoke-WebRequest 'https://raw.githubusercontent.com/spicetify/spicetify-marketplace/main/resources/install.ps1' -UseBasicParsing | Invoke-Expression
 }
