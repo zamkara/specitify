@@ -28,6 +28,18 @@ FETCH="$(fetch_cmd)"
 
 OS="$(uname -s 2>/dev/null || echo unknown)"
 
+fetch_file() {
+  url="$1"
+  out="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL -o "$out" "$url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$out" "$url"
+  else
+    die "curl or wget is required."
+  fi
+}
+
 install_spicetify() {
   info "Installing Spicetify..."
   $FETCH "https://raw.githubusercontent.com/spicetify/cli/main/install.sh" | sh
@@ -145,10 +157,100 @@ handle_linux_paths() {
   fi
 }
 
-if [ "$OS" = "Darwin" ]; then
+find_spotify_app_macos() {
+  if [ -d "/Applications/Spotify.app" ]; then
+    printf "%s" "/Applications/Spotify.app"
+    return 0
+  fi
+  if [ -d "$HOME/Applications/Spotify.app" ]; then
+    printf "%s" "$HOME/Applications/Spotify.app"
+    return 0
+  fi
+  if command -v mdfind >/dev/null 2>&1; then
+    app="$(mdfind "kMDItemCFBundleIdentifier == 'com.spotify.client'" 2>/dev/null | head -n 1)"
+    if [ -n "$app" ] && [ -d "$app" ]; then
+      printf "%s" "$app"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+install_spotify_macos() {
+  info "Downloading Spotify for macOS..."
+  dmg="$(mktemp /tmp/spotify.XXXXXX.dmg)"
+  fetch_file "https://download.scdn.co/Spotify.dmg" "$dmg"
+
+  info "Mounting Spotify.dmg..."
+  mountpoint="$(hdiutil attach "$dmg" -nobrowse | awk '/Volumes/ {print $3; exit}')"
+  if [ -z "$mountpoint" ] || [ ! -d "$mountpoint" ]; then
+    rm -f "$dmg"
+    die "Failed to mount Spotify.dmg"
+  fi
+
+  src_app="$mountpoint/Spotify.app"
+  if [ ! -d "$src_app" ]; then
+    hdiutil detach "$mountpoint" >/dev/null 2>&1 || true
+    rm -f "$dmg"
+    die "Spotify.app not found in dmg"
+  fi
+
+  target="/Applications/Spotify.app"
+  if [ ! -w "/Applications" ]; then
+    if confirm "Install Spotify to ~/Applications (no sudo)?"; then
+      mkdir -p "$HOME/Applications"
+      target="$HOME/Applications/Spotify.app"
+      rm -rf "$target"
+      cp -R "$src_app" "$target"
+    else
+      if confirm "Install Spotify to /Applications (requires sudo)?"; then
+        sudo rm -rf "$target"
+        sudo cp -R "$src_app" "$target"
+      else
+        warn "Skipping Spotify installation."
+      fi
+    fi
+  else
+    rm -rf "$target"
+    cp -R "$src_app" "$target"
+  fi
+
+  hdiutil detach "$mountpoint" >/dev/null 2>&1 || true
+  rm -f "$dmg"
+}
+
+handle_macos() {
+  app_path="$(find_spotify_app_macos || true)"
+  if [ -z "$app_path" ]; then
+    warn "Spotify.app not found."
+    if confirm "Install Spotify for macOS now?"; then
+      install_spotify_macos
+      app_path="$(find_spotify_app_macos || true)"
+    fi
+  fi
+
+  spotify_path=""
+  if [ -n "$app_path" ]; then
+    spotify_path="$app_path/Contents/Resources"
+    info "Using spotify_path: $spotify_path"
+  else
+    warn "Could not detect Spotify app location."
+  fi
+
+  prefs_path="$HOME/Library/Application Support/Spotify/prefs"
+  if [ ! -f "$prefs_path" ]; then
+    warn "Prefs file not found. Open Spotify once to generate it:"
+    info "  $prefs_path"
+  fi
+
   install_spicetify
+  set_spicetify_config "$spotify_path" "$prefs_path"
   install_marketplace
   post_notes
+}
+
+if [ "$OS" = "Darwin" ]; then
+  handle_macos
   exit 0
 fi
 
