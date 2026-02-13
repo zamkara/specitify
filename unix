@@ -324,6 +324,22 @@ install_marketplace_local() {
   info "  spicetify apply"
 }
 
+apply_spicetify() {
+  detect_spicetify_bin
+  if [ -z "$SPICETIFY_BIN" ]; then
+    warn "spicetify not found. Skipping apply."
+    return 1
+  fi
+  prefs_path="$("$SPICETIFY_BIN" -c 2>/dev/null | awk -F': ' '/prefs/ {print $2; exit}')"
+  if [ -z "$prefs_path" ] || [ ! -f "$prefs_path" ]; then
+    warn "Prefs file not found. Open Spotify once, then run:"
+    info "  spicetify apply"
+    return 1
+  fi
+  "$SPICETIFY_BIN" backup apply
+  "$SPICETIFY_BIN" apply
+}
+
 find_spotify_app_macos() {
   if [ -d "/Applications/Spotify.app" ]; then
     printf "%s" "/Applications/Spotify.app"
@@ -422,6 +438,7 @@ handle_macos() {
   install_spicetify
   set_spicetify_config "$spotify_path" "$prefs_path"
   install_marketplace
+  apply_spicetify
   post_notes
 }
 
@@ -447,6 +464,7 @@ if [ "$OS" = "Linux" ]; then
   fi
 
   install_marketplace
+  apply_spicetify
   post_notes
   exit 0
 fi
