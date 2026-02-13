@@ -76,12 +76,23 @@ run_remote_sh() {
 
 install_spicetify() {
   info "Installing Spicetify..."
-  $FETCH "https://raw.githubusercontent.com/spicetify/cli/main/install.sh" | sh
+  run_remote_sh "https://raw.githubusercontent.com/spicetify/cli/main/install.sh"
   detect_spicetify_bin
+}
+
+marketplace_present() {
+  if [ -d "$HOME/.config/spicetify/CustomApps/marketplace" ]; then
+    return 0
+  fi
+  return 1
 }
 
 install_marketplace() {
   if confirm "Install Spicetify Marketplace?"; then
+    if marketplace_present; then
+      info "Marketplace already installed. Skipping."
+      return 0
+    fi
     info "Using local Marketplace installer."
     install_marketplace_local
   fi
