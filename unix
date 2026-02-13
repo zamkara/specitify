@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-SCRIPT_VERSION="2026-02-13-03"
+SCRIPT_VERSION="2026-02-13-04"
 
 info() { printf "%s\n" "$*"; }
 warn() { printf "Warning: %s\n" "$*" >&2; }
@@ -331,6 +331,27 @@ apply_spicetify() {
     return 1
   fi
   prefs_path="$("$SPICETIFY_BIN" -c 2>/dev/null | awk -F': ' '/prefs/ {print $2; exit}')"
+  if [ -z "$prefs_path" ] || [ ! -f "$prefs_path" ]; then
+    if [ "$OS" = "Darwin" ] && command -v open >/dev/null 2>&1; then
+      info "Opening Spotify to generate prefs..."
+      open -a "Spotify" >/dev/null 2>&1 || true
+      i=0
+      while [ $i -lt 60 ]; do
+        [ -n "$prefs_path" ] && [ -f "$prefs_path" ] && break
+        sleep 1
+        i=$((i+1))
+      done
+    elif command -v spotify >/dev/null 2>&1; then
+      info "Launching Spotify to generate prefs..."
+      spotify >/dev/null 2>&1 &
+      i=0
+      while [ $i -lt 60 ]; do
+        [ -n "$prefs_path" ] && [ -f "$prefs_path" ] && break
+        sleep 1
+        i=$((i+1))
+      done
+    fi
+  fi
   if [ -z "$prefs_path" ] || [ ! -f "$prefs_path" ]; then
     warn "Prefs file not found. Open Spotify once, then run:"
     info "  spicetify apply"
