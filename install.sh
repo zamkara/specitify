@@ -1,0 +1,176 @@
+#!/bin/sh
+set -e
+
+info() { printf "%s\n" "$*"; }
+warn() { printf "Warning: %s\n" "$*" >&2; }
+die() { printf "Error: %s\n" "$*" >&2; exit 1; }
+
+confirm() {
+  printf "%s [Y/n] " "$1"
+  read ans
+  case "$ans" in
+    ""|Y|y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+fetch_cmd() {
+  if command -v curl >/dev/null 2>&1; then
+    printf "%s" "curl -fsSL"
+  elif command -v wget >/dev/null 2>&1; then
+    printf "%s" "wget -qO-"
+  else
+    die "curl or wget is required."
+  fi
+}
+
+FETCH="$(fetch_cmd)"
+
+OS="$(uname -s 2>/dev/null || echo unknown)"
+
+install_spicetify() {
+  info "Installing Spicetify..."
+  $FETCH "https://raw.githubusercontent.com/spicetify/cli/main/install.sh" | sh
+}
+
+install_marketplace() {
+  if confirm "Install Spicetify Marketplace?"; then
+    $FETCH "https://raw.githubusercontent.com/spicetify/marketplace/main/resources/install.sh" | sh
+  fi
+}
+
+post_notes() {
+  info ""
+  info "After Spotify updates, re-apply:"
+  info "  spicetify backup apply"
+  info "If that doesn't work, try:"
+  info "  spicetify update"
+  info "If you updated Spicetify via a package manager:"
+  info "  spicetify restore backup apply"
+}
+
+set_spicetify_config() {
+  if command -v spicetify >/dev/null 2>&1; then
+    [ -n "$1" ] && spicetify config spotify_path "$1"
+    [ -n "$2" ] && spicetify config prefs_path "$2"
+  else
+    warn "spicetify not found in PATH. Open a new shell and run:"
+    [ -n "$1" ] && info "  spicetify config spotify_path \"$1\""
+    [ -n "$2" ] && info "  spicetify config prefs_path \"$2\""
+  fi
+}
+
+fix_permissions() {
+  base="$1"
+  apps="$1/Apps"
+  if [ ! -d "$base" ]; then
+    return 0
+  fi
+  if [ -w "$base" ]; then
+    chmod a+wr "$base" 2>/dev/null || true
+    [ -d "$apps" ] && chmod -R a+wr "$apps" 2>/dev/null || true
+  else
+    if confirm "Grant write permissions to $base (requires sudo)?"; then
+      sudo chmod a+wr "$base"
+      [ -d "$apps" ] && sudo chmod -R a+wr "$apps"
+    else
+      warn "Skipping permission changes."
+    fi
+  fi
+}
+
+handle_flatpak() {
+  info "Detected Spotify Flatpak."
+  spotify_path=""
+  prefs_path=""
+
+  for p in \
+    "/var/lib/flatpak/app/com.spotify.Client/x86_64/stable/active/files/extra/share/spotify" \
+    "$HOME/.local/share/flatpak/app/com.spotify.Client/x86_64/stable/active/files/extra/share/spotify"
+  do
+    if [ -d "$p" ]; then
+      spotify_path="$p"
+      break
+    fi
+  done
+
+  if [ -f "$HOME/.var/app/com.spotify.Client/config/spotify/prefs" ]; then
+    prefs_path="$HOME/.var/app/com.spotify.Client/config/spotify/prefs"
+  elif [ -f "$HOME/.config/spotify/prefs" ]; then
+    prefs_path="$HOME/.config/spotify/prefs"
+  fi
+
+  if [ -z "$spotify_path" ]; then
+    warn "Could not auto-detect Flatpak Spotify path."
+    info "Try running: flatpak --installations"
+  else
+    info "Using spotify_path: $spotify_path"
+  fi
+
+  if [ -n "$prefs_path" ]; then
+    info "Using prefs_path: $prefs_path"
+  else
+    warn "Could not find prefs file."
+    info "Check:"
+    info "  $HOME/.config/spotify/prefs"
+    info "  $HOME/.var/app/com.spotify.Client/config/spotify/prefs"
+  fi
+
+  set_spicetify_config "$spotify_path" "$prefs_path"
+
+  [ -n "$spotify_path" ] && fix_permissions "$spotify_path"
+}
+
+handle_snap() {
+  warn "Snap Spotify detected. Snap apps cannot be modified."
+  info "Recommended: switch to apt version. Commands:"
+  info "  sudo snap remove spotify"
+  info "  curl -sS https://download.spotify.com/debian/pubkey_C85668DF69375001.gpg | sudo gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg"
+  info "  echo \"deb http://repository.spotify.com stable non-free\" | sudo tee /etc/apt/sources.list.d/spotify.list"
+  info "  sudo apt-get update && sudo apt-get install spotify-client"
+  info "Then grant permissions:"
+  info "  sudo chmod a+wr /usr/share/spotify"
+  info "  sudo chmod a+wr -R /usr/share/spotify/Apps"
+}
+
+handle_linux_paths() {
+  if [ -d "/usr/share/spotify" ]; then
+    set_spicetify_config "/usr/share/spotify" "$HOME/.config/spotify/prefs"
+    fix_permissions "/usr/share/spotify"
+  else
+    warn "Could not find /usr/share/spotify."
+    info "If Spotify is installed elsewhere, set it manually:"
+    info "  spicetify config spotify_path /path/to/spotify"
+    info "  spicetify config prefs_path /path/to/prefs"
+  fi
+}
+
+if [ "$OS" = "Darwin" ]; then
+  install_spicetify
+  install_marketplace
+  post_notes
+  exit 0
+fi
+
+if [ "$OS" = "Linux" ]; then
+  install_spicetify
+
+  if command -v snap >/dev/null 2>&1 && snap list spotify >/dev/null 2>&1; then
+    handle_snap
+    install_marketplace
+    post_notes
+    exit 0
+  fi
+
+  if command -v flatpak >/dev/null 2>&1 && flatpak info com.spotify.Client >/dev/null 2>&1; then
+    handle_flatpak
+  else
+    handle_linux_paths
+  fi
+
+  install_marketplace
+  post_notes
+  exit 0
+fi
+
+die "Unsupported OS: $OS"
