@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+SCRIPT_VERSION="2026-02-13-02"
+
 info() { printf "%s\n" "$*"; }
 warn() { printf "Warning: %s\n" "$*" >&2; }
 die() { printf "Error: %s\n" "$*" >&2; exit 1; }
@@ -27,6 +29,7 @@ fetch_cmd() {
 FETCH="$(fetch_cmd)"
 
 OS="$(uname -s 2>/dev/null || echo unknown)"
+info "specitify unix installer v$SCRIPT_VERSION"
 
 SPICETIFY_BIN=""
 
@@ -79,6 +82,7 @@ install_spicetify() {
 
 install_marketplace() {
   if confirm "Install Spicetify Marketplace?"; then
+    info "Using local Marketplace installer."
     install_marketplace_local
   fi
 }
