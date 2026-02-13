@@ -1,8 +1,1 @@
-$downloadUrl = 'https://github.com/zamkara/specitify/raw/refs/heads/main/specitify.ps1'
-$tempFilePath = [System.IO.Path]::Combine($env:TEMP, 'specitify.ps1')
-
-# Mengunduh file .ps1 ke direktori sementara
-Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFilePath
-
-# Menjalankan file PowerShell yang diunduh
-Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File $tempFilePath" -Wait
+#!/bin/sh echo `# <#` set -e if command -v curl >/dev/null 2>&1; then FETCH="curl -fsSL" elif command -v wget >/dev/null 2>&1; then FETCH="wget -qO-" else echo "Error: curl or wget is required." >&2 exit 1 fi $FETCH "https://raw.githubusercontent.com/spicetify/cli/main/install.sh" | sh printf "Install Spicetify Marketplace? [Y/n] " read ans case "$ans" in ""|Y|y|yes|YES) $FETCH "https://raw.githubusercontent.com/spicetify/marketplace/main/resources/install.sh" | sh ;; esac echo "" echo "After Spotify updates, re-apply:" echo " spicetify backup apply" echo "If that doesn't work, try:" echo " spicetify update" exit #> > $null $downloadUrl = 'https://github.com/zamkara/specitify/raw/refs/heads/main/specitify.ps1' $tempFilePath = [System.IO.Path]::Combine($env:TEMP, 'specitify.ps1') Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFilePath Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File $tempFilePath" -Wait
