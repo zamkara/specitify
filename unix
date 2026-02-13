@@ -28,6 +28,15 @@ FETCH="$(fetch_cmd)"
 
 OS="$(uname -s 2>/dev/null || echo unknown)"
 
+ensure_spicetify_path() {
+  if command -v spicetify >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -x "$HOME/.spicetify/spicetify" ]; then
+    export PATH="$HOME/.spicetify:$PATH"
+  fi
+}
+
 fetch_file() {
   url="$1"
   out="$2"
@@ -43,10 +52,12 @@ fetch_file() {
 install_spicetify() {
   info "Installing Spicetify..."
   $FETCH "https://raw.githubusercontent.com/spicetify/cli/main/install.sh" | sh
+  ensure_spicetify_path
 }
 
 install_marketplace() {
   if confirm "Install Spicetify Marketplace?"; then
+    ensure_spicetify_path
     $FETCH "https://raw.githubusercontent.com/spicetify/marketplace/main/resources/install.sh" | sh
   fi
 }
@@ -62,6 +73,7 @@ post_notes() {
 }
 
 set_spicetify_config() {
+  ensure_spicetify_path
   if command -v spicetify >/dev/null 2>&1; then
     [ -n "$1" ] && spicetify config spotify_path "$1"
     [ -n "$2" ] && spicetify config prefs_path "$2"
