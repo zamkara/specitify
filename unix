@@ -28,12 +28,25 @@ FETCH="$(fetch_cmd)"
 
 OS="$(uname -s 2>/dev/null || echo unknown)"
 
+SPICETIFY_BIN=""
+
 ensure_spicetify_path() {
-  if command -v spicetify >/dev/null 2>&1; then
-    return 0
-  fi
   if [ -x "$HOME/.spicetify/spicetify" ]; then
-    export PATH="$HOME/.spicetify:$PATH"
+    case ":$PATH:" in
+      *":$HOME/.spicetify:"*) ;;
+      *) export PATH="$HOME/.spicetify:$PATH" ;;
+    esac
+  fi
+}
+
+detect_spicetify_bin() {
+  ensure_spicetify_path
+  if command -v spicetify >/dev/null 2>&1; then
+    SPICETIFY_BIN="$(command -v spicetify)"
+  elif [ -x "$HOME/.spicetify/spicetify" ]; then
+    SPICETIFY_BIN="$HOME/.spicetify/spicetify"
+  else
+    SPICETIFY_BIN=""
   fi
 }
 
@@ -49,16 +62,24 @@ fetch_file() {
   fi
 }
 
+run_remote_sh() {
+  url="$1"
+  script="$(mktemp /tmp/spicetify.XXXXXX.sh)"
+  fetch_file "$url" "$script"
+  ensure_spicetify_path
+  PATH="$HOME/.spicetify:$PATH" sh "$script"
+  rm -f "$script"
+}
+
 install_spicetify() {
   info "Installing Spicetify..."
   $FETCH "https://raw.githubusercontent.com/spicetify/cli/main/install.sh" | sh
-  ensure_spicetify_path
+  detect_spicetify_bin
 }
 
 install_marketplace() {
   if confirm "Install Spicetify Marketplace?"; then
-    ensure_spicetify_path
-    $FETCH "https://raw.githubusercontent.com/spicetify/marketplace/main/resources/install.sh" | sh
+    install_marketplace_local
   fi
 }
 
@@ -73,10 +94,10 @@ post_notes() {
 }
 
 set_spicetify_config() {
-  ensure_spicetify_path
-  if command -v spicetify >/dev/null 2>&1; then
-    [ -n "$1" ] && spicetify config spotify_path "$1"
-    [ -n "$2" ] && spicetify config prefs_path "$2"
+  detect_spicetify_bin
+  if [ -n "$SPICETIFY_BIN" ]; then
+    [ -n "$1" ] && "$SPICETIFY_BIN" config spotify_path "$1"
+    [ -n "$2" ] && "$SPICETIFY_BIN" config prefs_path "$2"
   else
     warn "spicetify not found in PATH. Open a new shell and run:"
     [ -n "$1" ] && info "  spicetify config spotify_path \"$1\""
@@ -167,6 +188,59 @@ handle_linux_paths() {
     info "  spicetify config spotify_path /path/to/spotify"
     info "  spicetify config prefs_path /path/to/prefs"
   fi
+}
+
+get_marketplace_tag() {
+  tag="$($FETCH "https://api.github.com/repos/spicetify/marketplace/releases/latest" \
+    | awk -F'"' '/"tag_name":/ {print $4; exit}')"
+  if [ -z "$tag" ]; then
+    warn "Could not detect latest Marketplace release tag."
+  fi
+  printf "%s" "$tag"
+}
+
+install_marketplace_local() {
+  detect_spicetify_bin
+  if [ -z "$SPICETIFY_BIN" ]; then
+    warn "spicetify not found. Install Spicetify first."
+    return 1
+  fi
+
+  if ! command -v unzip >/dev/null 2>&1; then
+    warn "unzip not found. Please install unzip and retry."
+    return 1
+  fi
+
+  tag="$(get_marketplace_tag)"
+  [ -z "$tag" ] && tag="v1.0.8"
+
+  zip_url="https://github.com/spicetify/marketplace/releases/download/$tag/marketplace.zip"
+  tmpdir="$(mktemp -d /tmp/marketplace.XXXXXX)"
+  zip="$tmpdir/marketplace.zip"
+
+  info "Downloading Marketplace $tag..."
+  fetch_file "$zip_url" "$zip"
+
+  custom_apps="$HOME/.config/spicetify/CustomApps"
+  mkdir -p "$custom_apps"
+
+  unzip -q "$zip" -d "$tmpdir"
+  if [ -d "$tmpdir/marketplace" ]; then
+    rm -rf "$custom_apps/marketplace"
+    cp -R "$tmpdir/marketplace" "$custom_apps/marketplace"
+  else
+    warn "Unexpected marketplace zip structure."
+  fi
+
+  rm -rf "$tmpdir"
+
+  "$SPICETIFY_BIN" config custom_apps marketplace
+  "$SPICETIFY_BIN" config current_theme marketplace
+  "$SPICETIFY_BIN" config inject_css 1
+  "$SPICETIFY_BIN" config replace_colors 1
+
+  info "Marketplace installed. Run:"
+  info "  spicetify apply"
 }
 
 find_spotify_app_macos() {
