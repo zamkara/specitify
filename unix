@@ -123,6 +123,16 @@ marketplace_present() {
 }
 
 install_marketplace() {
+  if [ "$OS" = "Darwin" ]; then
+    if marketplace_present; then
+      info "Marketplace already installed. Skipping."
+      return 0
+    fi
+    info "Using local Marketplace installer."
+    install_marketplace_local
+    return 0
+  fi
+
   if confirm "Install Spicetify Marketplace?"; then
     if marketplace_present; then
       info "Marketplace already installed. Skipping."
