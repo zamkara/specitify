@@ -378,6 +378,9 @@ apply_spicetify() {
     info "  $SPICETIFY_BIN apply"
     return 1
   fi
+  if [ "$OS" = "Darwin" ]; then
+    "$SPICETIFY_BIN" restore backup >/dev/null 2>&1 || true
+  fi
   "$SPICETIFY_BIN" backup apply
   "$SPICETIFY_BIN" apply
 }
