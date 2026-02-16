@@ -1,1 +1,18 @@
-#!/bin/sh echo `# <#` set -e if command -v curl >/dev/null 2>&1; then FETCH="curl -fsSL" elif command -v wget >/dev/null 2>&1; then FETCH="wget -qO-" else echo "Error: curl or wget is required." >&2 exit 1 fi $FETCH "https://spicetify.zamkara.uk/unix" | sh exit #> > $null $downloadUrl = 'https://spicetify.zamkara.uk/specitify.ps1' $tempFilePath = [System.IO.Path]::Combine($env:TEMP, 'specitify.ps1') Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFilePath Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File $tempFilePath" -Wait
+#!/bin/sh
+echo `# <#`
+set -e
+if command -v curl >/dev/null 2>&1; then
+  FETCH="curl -fsSL"
+elif command -v wget >/dev/null 2>&1; then
+  FETCH="wget -qO-"
+else
+  echo "Error: curl or wget is required." >&2
+  exit 1
+fi
+$FETCH "https://spicetify.zamkara.uk/unix" | sh
+exit
+#> > $null
+$downloadUrl = 'https://spicetify.zamkara.uk/specitify.ps1'
+$tempFilePath = [System.IO.Path]::Combine($env:TEMP, 'specitify.ps1')
+Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFilePath
+Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File $tempFilePath" -Wait
